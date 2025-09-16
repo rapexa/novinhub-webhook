@@ -1,0 +1,47 @@
+# NovinHub Webhook Service Configuration
+
+# Server configuration
+server:
+  port: 8080
+  read_timeout: 10
+  write_timeout: 10
+  host: "0.0.0.0"
+
+# Logging configuration
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json" # json, text
+  output: "stdout" # stdout, file
+  file_path: "/var/log/novinhub-webhook/webhook.log"
+
+# Webhook configuration
+webhook:
+  # Maximum request size in bytes (default: 1MB)
+  max_request_size: 1048576
+  # Timeout for processing webhook events in seconds
+  processing_timeout: 30
+  # Enable request logging
+  enable_request_logging: true
+
+# Security configuration
+security:
+  # Enable CORS
+  enable_cors: true
+  # Allowed origins (empty means all)
+  allowed_origins: []
+  # Rate limiting (requests per minute per IP)
+  rate_limit: 100
+
+# Health check configuration
+health:
+  # Health check endpoint path
+  endpoint: "/health"
+  # Health check timeout
+  timeout: 5
+
+# Environment specific settings
+environment:
+  # Current environment (development, staging, production)
+  mode: "development"
+  # Enable debug mode
+  debug: false
