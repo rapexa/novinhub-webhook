@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -33,19 +34,36 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read the raw body first for logging
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Error("Failed to read request body", "error", err)
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	// Log the complete raw request
+	h.logger.Info("Raw webhook request received",
+		"method", r.Method,
+		"url", r.URL.String(),
+		"headers", r.Header,
+		"raw_body", string(body))
+
 	// Parse the webhook event
 	var event models.WebhookEvent
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+	if err := json.Unmarshal(body, &event); err != nil {
 		h.logger.Error("Failed to decode webhook payload", "error", err)
 		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
 		return
 	}
 
-	// Log the received event
+	// Log the received event with raw payload
+	rawPayload, _ := json.Marshal(event.Payload)
 	h.logger.Info("Webhook event received",
 		"type", event.Type,
 		"user_id", event.UserID.String(),
-		"timestamp", time.Now().UTC())
+		"timestamp", time.Now().UTC(),
+		"raw_payload", string(rawPayload))
 
 	// Process different event types
 	switch event.Type {
@@ -91,7 +109,9 @@ func (h *WebhookHandler) handleMessageCreated(event models.WebhookEvent) {
 
 	h.logger.Info("Message details",
 		"message_id", message.ID,
-		"content", message.Content)
+		"content", message.Content,
+		"account", message.Account,
+		"social_user", message.SocialUser)
 
 	// Add your business logic here for handling new messages
 	// For example: save to database, send notifications, etc.
@@ -116,7 +136,10 @@ func (h *WebhookHandler) handleCommentCreated(event models.WebhookEvent) {
 
 	h.logger.Info("Comment details",
 		"comment_id", comment.ID,
-		"content", comment.Content)
+		"content", comment.Content,
+		"account", comment.Account,
+		"social_user", comment.SocialUser,
+		"account_post", comment.AccountPost)
 
 	// Add your business logic here for handling new comments
 }
@@ -138,7 +161,10 @@ func (h *WebhookHandler) handleAutoformCompleted(event models.WebhookEvent) {
 		return
 	}
 
-	h.logger.Info("Form response details", "form_id", formResponse.ID)
+	h.logger.Info("Form response details",
+		"form_id", formResponse.ID,
+		"messages", formResponse.Messages,
+		"social_user", formResponse.SocialUser)
 
 	// Add your business logic here for handling completed forms
 }
@@ -162,7 +188,9 @@ func (h *WebhookHandler) handleLeadCreated(event models.WebhookEvent) {
 
 	h.logger.Info("Lead details",
 		"lead_id", lead.ID,
-		"phone", lead.Phone)
+		"phone", lead.Phone,
+		"messages", lead.Messages,
+		"social_user", lead.SocialUser)
 
 	// Add your business logic here for handling new leads
 }
