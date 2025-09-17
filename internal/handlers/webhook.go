@@ -44,7 +44,7 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	// Log the received event
 	h.logger.Info("Webhook event received",
 		"type", event.Type,
-		"user_id", event.UserID,
+		"user_id", event.UserID.String(),
 		"timestamp", time.Now().UTC())
 
 	// Process different event types
@@ -74,7 +74,7 @@ func (h *WebhookHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 // handleMessageCreated processes message_created events
 func (h *WebhookHandler) handleMessageCreated(event models.WebhookEvent) {
-	h.logger.Info("Processing message_created event", "user_id", event.UserID)
+	h.logger.Info("Processing message_created event", "user_id", event.UserID.String())
 
 	// Parse the message payload
 	messageBytes, err := json.Marshal(event.Payload)
@@ -99,7 +99,7 @@ func (h *WebhookHandler) handleMessageCreated(event models.WebhookEvent) {
 
 // handleCommentCreated processes comment_created events
 func (h *WebhookHandler) handleCommentCreated(event models.WebhookEvent) {
-	h.logger.Info("Processing comment_created event", "user_id", event.UserID)
+	h.logger.Info("Processing comment_created event", "user_id", event.UserID.String())
 
 	// Parse the comment payload
 	commentBytes, err := json.Marshal(event.Payload)
@@ -123,7 +123,7 @@ func (h *WebhookHandler) handleCommentCreated(event models.WebhookEvent) {
 
 // handleAutoformCompleted processes autoform_completed events
 func (h *WebhookHandler) handleAutoformCompleted(event models.WebhookEvent) {
-	h.logger.Info("Processing autoform_completed event", "user_id", event.UserID)
+	h.logger.Info("Processing autoform_completed event", "user_id", event.UserID.String())
 
 	// Parse the form response payload
 	formBytes, err := json.Marshal(event.Payload)
@@ -145,7 +145,7 @@ func (h *WebhookHandler) handleAutoformCompleted(event models.WebhookEvent) {
 
 // handleLeadCreated processes leed_created events
 func (h *WebhookHandler) handleLeadCreated(event models.WebhookEvent) {
-	h.logger.Info("Processing leed_created event", "user_id", event.UserID)
+	h.logger.Info("Processing leed_created event", "user_id", event.UserID.String())
 
 	// Parse the lead payload
 	leadBytes, err := json.Marshal(event.Payload)
@@ -169,7 +169,7 @@ func (h *WebhookHandler) handleLeadCreated(event models.WebhookEvent) {
 
 // handleRevalidate processes revalidate events
 func (h *WebhookHandler) handleRevalidate(event models.WebhookEvent) {
-	h.logger.Info("Processing revalidate event", "user_id", event.UserID)
+	h.logger.Info("Processing revalidate event", "user_id", event.UserID.String())
 
 	// Add your business logic here for handling revalidation
 	// This is typically used to verify webhook authenticity

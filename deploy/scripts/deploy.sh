@@ -54,7 +54,7 @@ sudo chown -R $APP_USER:$APP_USER /var/log/$APP_NAME
 
 # Build the application
 log_info "Building application..."
-go build -o build/$APP_NAME cmd/server/main.go
+go build -o novinhub-webhook cmd/server/main.go
 
 # Copy binary
 log_info "Installing binary..."
