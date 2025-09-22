@@ -45,7 +45,7 @@ sms:
   provider: "ippanel"
   # IPPanel configuration
   ippanel:
-    api_key: "OWY1ZTAyMjEtMThmNi00NzRiLWFhOTItZTEwMmFhNDQzZTliZTcwM2EzODg5NzUzNWMwOWE3ZDliYWUyYTExMWZlMzY="
+    api_key: "OWY5ZTAyMjEtMThmNi00NzRiLWFhOTItZTEwMmFhNDQzZTliZTcwM2EzODg5NzUzNWMwOWE3ZDliYWUyYTExMWZlMzY="
     originator: "+9850002040000000"
   # Enable SMS sending (set to false for testing)
   enabled: true

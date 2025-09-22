@@ -179,9 +179,13 @@ func (sms IPPanelClient) request(method string, uri string, params map[string]st
 		}
 		return _res, nil
 	case http.StatusInternalServerError:
-		return nil, ErrUnexpectedResponse
+		return nil, fmt.Errorf("IPPanel API internal server error (500). Response: %s", string(responseBody))
 	case http.StatusUnauthorized:
-		return nil, ErrUnexpectedResponse
+		return nil, fmt.Errorf("IPPanel API unauthorized (401) - check your API key. Response: %s", string(responseBody))
+	case http.StatusBadRequest:
+		return nil, fmt.Errorf("IPPanel API bad request (400). Response: %s", string(responseBody))
+	case http.StatusTooManyRequests:
+		return nil, fmt.Errorf("IPPanel API rate limit exceeded (429). Response: %s", string(responseBody))
 	default:
 		_res := &BaseResponse{}
 		if err := json.Unmarshal(responseBody, _res); err != nil {
@@ -235,33 +239,67 @@ func (sms *IPPanelClient) SendPattern(patternCode string, originator string, rec
 	jsonData, _ := json.Marshal(data)
 	fmt.Printf("🔍 SMS Request: %s\n", string(jsonData))
 
-	_res, err := sms.post("/sms/pattern/normal/send", "application/json", data)
-	if err != nil {
-		return 0, fmt.Errorf("SMS API request failed: %v", err)
+	// Retry mechanism (3 attempts)
+	maxAttempts := 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		fmt.Printf("🔄 SMS Attempt %d/%d\n", attempt, maxAttempts)
+
+		_res, err := sms.post("/sms/pattern/normal/send", "application/json", data)
+		if err != nil {
+			if attempt == maxAttempts {
+				return 0, fmt.Errorf("SMS API request failed after %d attempts: %v", maxAttempts, err)
+			}
+			fmt.Printf("⚠️ SMS Attempt %d failed, retrying... Error: %v\n", attempt, err)
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+			continue
+		}
+
+		if _res == nil {
+			if attempt == maxAttempts {
+				return 0, fmt.Errorf("SMS API returned empty response after %d attempts", maxAttempts)
+			}
+			fmt.Printf("⚠️ SMS Attempt %d returned empty response, retrying...\n", attempt)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+
+		// Debug logging
+		fmt.Printf("🔍 SMS Response Status: %s, Code: %d\n", _res.Status, _res.Code)
+		fmt.Printf("🔍 SMS Response Data: %s\n", string(_res.Data))
+
+		if _res.Data == nil {
+			if attempt == maxAttempts {
+				return 0, fmt.Errorf("SMS API returned null data after %d attempts", maxAttempts)
+			}
+			fmt.Printf("⚠️ SMS Attempt %d returned null data, retrying...\n", attempt)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+
+		res := sendResType{}
+		if err = json.Unmarshal(_res.Data, &res); err != nil {
+			if attempt == maxAttempts {
+				return 0, fmt.Errorf("failed to parse SMS API response after %d attempts: %v. Raw data: %s", maxAttempts, err, string(_res.Data))
+			}
+			fmt.Printf("⚠️ SMS Attempt %d failed to parse response, retrying... Error: %v\n", attempt, err)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+
+		if res.MessageId == 0 {
+			if attempt == maxAttempts {
+				return 0, fmt.Errorf("SMS API returned invalid message ID after %d attempts. Raw response: %s", maxAttempts, string(_res.Data))
+			}
+			fmt.Printf("⚠️ SMS Attempt %d returned invalid message ID, retrying...\n", attempt)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+
+		fmt.Printf("✅ SMS sent successfully on attempt %d with MessageId: %d\n", attempt, res.MessageId)
+		return res.MessageId, nil
 	}
 
-	if _res == nil {
-		return 0, fmt.Errorf("SMS API returned empty response")
-	}
-
-	// Debug logging
-	fmt.Printf("🔍 SMS Response Status: %s, Code: %d\n", _res.Status, _res.Code)
-	fmt.Printf("🔍 SMS Response Data: %s\n", string(_res.Data))
-
-	if _res.Data == nil {
-		return 0, fmt.Errorf("SMS API returned null data")
-	}
-
-	res := sendResType{}
-	if err = json.Unmarshal(_res.Data, &res); err != nil {
-		return 0, fmt.Errorf("failed to parse SMS API response: %v. Raw data: %s", err, string(_res.Data))
-	}
-
-	if res.MessageId == 0 {
-		return 0, fmt.Errorf("SMS API returned invalid message ID. Raw response: %s", string(_res.Data))
-	}
-
-	return res.MessageId, nil
+	return 0, fmt.Errorf("unexpected error in SMS retry mechanism")
 }
 
 // GetCredit get credit for user
