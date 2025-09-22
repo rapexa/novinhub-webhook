@@ -84,12 +84,20 @@ func (s *SMSService) SendSMSWithPattern(phoneNumber string, userID string) error
 	}
 
 	// Check required configuration
-	if s.config.SMS.IPPanel.Originator == "" || s.config.SMS.IPPanel.PatternCode == "" {
+	if s.config.SMS.IPPanel.Originator == "" {
 		s.logger.Error("❌ SMS CONFIGURATION INCOMPLETE",
 			"phone", phoneNumber,
 			"originator_configured", s.config.SMS.IPPanel.Originator != "",
-			"pattern_configured", s.config.SMS.IPPanel.PatternCode != "")
-		return fmt.Errorf("SMS configuration incomplete")
+			"error", "originator not configured")
+		return fmt.Errorf("SMS configuration incomplete: originator not configured")
+	}
+
+	// Check if pattern is available
+	if currentPattern == "" {
+		s.logger.Error("❌ NO PATTERN AVAILABLE",
+			"phone", phoneNumber,
+			"error", "no pattern configured")
+		return fmt.Errorf("no pattern configured for SMS sending")
 	}
 
 	// Prepare pattern variables (customize as needed)

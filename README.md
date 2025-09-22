@@ -144,15 +144,14 @@ sms:
   ippanel:
     api_key: "YOUR_API_KEY"
     originator: "+9850002040000000"
-    pattern_code: "9i276pvpwvuj40w"
   patterns:
     enabled: true
     list:
-      - "a2xjmxbszf27a7e"  # گروه اول
+      - "a2xjmxbszf27a7e"  # گروه اول (پیش‌فرض)
       - "m3p3jtuu13i4n1o"  # گروه دوم
       - "l05j64348i04cx8"  # گروه سوم
       - "nv4fgs9mczuv6rq"  # گروه چهارم
-    current: 0  # Current pattern index
+    current: 0  # Current pattern index (0-based) - گروه اول پیش‌فرض
 
 # Environment settings
 environment:

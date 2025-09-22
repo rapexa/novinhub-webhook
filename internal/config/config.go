@@ -65,10 +65,8 @@ type SMSConfig struct {
 
 // IPPanelConfig holds IPPanel-specific configuration
 type IPPanelConfig struct {
-	APIKey                  string `mapstructure:"api_key"`
-	Originator              string `mapstructure:"originator"`
-	PatternCode             string `mapstructure:"pattern_code"`
-	PasswordRecoveryPattern string `mapstructure:"password_recovery_pattern"`
+	APIKey     string `mapstructure:"api_key"`
+	Originator string `mapstructure:"originator"`
 }
 
 // RetryConfig holds retry-related configuration
@@ -192,11 +190,12 @@ func (c *Config) IsDevelopment() bool {
 // GetCurrentPattern returns the current pattern
 func (c *Config) GetCurrentPattern() string {
 	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
-		return c.SMS.IPPanel.PatternCode // Fallback to default pattern
+		return "" // No patterns configured
 	}
 
+	// Always use pattern at current index (0-based)
 	if c.SMS.Patterns.Current >= len(c.SMS.Patterns.List) {
-		return c.SMS.Patterns.List[0] // Fallback to first pattern
+		c.SMS.Patterns.Current = 0 // Reset to first pattern if out of bounds
 	}
 
 	return c.SMS.Patterns.List[c.SMS.Patterns.Current]
@@ -205,11 +204,12 @@ func (c *Config) GetCurrentPattern() string {
 // GetCurrentPatternInfo returns current pattern with index and group name
 func (c *Config) GetCurrentPatternInfo() (string, int, string) {
 	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
-		return c.SMS.IPPanel.PatternCode, 1, "پترن پیش‌فرض"
+		return "", 0, "هیچ پترنی تنظیم نشده"
 	}
 
+	// Ensure current index is within bounds
 	if c.SMS.Patterns.Current >= len(c.SMS.Patterns.List) {
-		return c.SMS.Patterns.List[0], 1, "گروه اول"
+		c.SMS.Patterns.Current = 0
 	}
 
 	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
@@ -222,9 +222,10 @@ func (c *Config) GetCurrentPatternInfo() (string, int, string) {
 // NextPattern moves to the next pattern
 func (c *Config) NextPattern() (string, int, string) {
 	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
-		return c.SMS.IPPanel.PatternCode, 1, "پترن پیش‌فرض"
+		return "", 0, "هیچ پترنی تنظیم نشده"
 	}
 
+	// Move to next pattern (circular)
 	c.SMS.Patterns.Current = (c.SMS.Patterns.Current + 1) % len(c.SMS.Patterns.List)
 
 	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
@@ -253,12 +254,17 @@ func (c *Config) GetPatternsList() []map[string]interface{} {
 	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
 		return []map[string]interface{}{
 			{
-				"index":      1,
-				"name":       "پترن پیش‌فرض",
-				"pattern":    c.SMS.IPPanel.PatternCode,
+				"index":      0,
+				"name":       "هیچ پترنی تنظیم نشده",
+				"pattern":    "",
 				"is_current": true,
 			},
 		}
+	}
+
+	// Ensure current index is within bounds
+	if c.SMS.Patterns.Current >= len(c.SMS.Patterns.List) {
+		c.SMS.Patterns.Current = 0
 	}
 
 	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
