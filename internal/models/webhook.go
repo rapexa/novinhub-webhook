@@ -43,6 +43,7 @@ type WebhookEvent struct {
 // Message represents a message created event
 type Message struct {
 	ID         string      `json:"id"`
+	Text       string      `json:"text"`
 	Content    string      `json:"content"`
 	Account    interface{} `json:"account"`
 	SocialUser interface{} `json:"socialUser"`
@@ -67,9 +68,12 @@ type AutomationFormResponse struct {
 // Lead represents a lead created event
 type Lead struct {
 	ID         string      `json:"id"`
-	Phone      string      `json:"phone"`
-	Messages   interface{} `json:"messages"`
-	SocialUser interface{} `json:"socialUser"`
+	Type       string      `json:"type"`       // "number", "email", etc.
+	Value      string      `json:"value"`      // The actual phone number or email
+	MessageID  string      `json:"message_id"` // Associated message ID
+	CreatedAt  string      `json:"created_at"` // Creation timestamp
+	Message    interface{} `json:"message"`    // Associated message data
+	SocialUser interface{} `json:"socialUser"` // Social user info
 }
 
 // WebhookResponse represents the response sent back to NovinHub

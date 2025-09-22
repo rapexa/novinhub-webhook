@@ -14,6 +14,7 @@ type Config struct {
 	Webhook  WebhookConfig     `mapstructure:"webhook"`
 	Security SecurityConfig    `mapstructure:"security"`
 	Health   HealthConfig      `mapstructure:"health"`
+	SMS      SMSConfig         `mapstructure:"sms"`
 	Env      EnvironmentConfig `mapstructure:"environment"`
 }
 
@@ -53,6 +54,36 @@ type HealthConfig struct {
 	Timeout  int    `mapstructure:"timeout"`
 }
 
+// SMSConfig holds SMS-related configuration
+type SMSConfig struct {
+	Provider string        `mapstructure:"provider"`
+	IPPanel  IPPanelConfig `mapstructure:"ippanel"`
+	Enabled  bool          `mapstructure:"enabled"`
+	Retry    RetryConfig   `mapstructure:"retry"`
+	Patterns PatternConfig `mapstructure:"patterns"`
+}
+
+// IPPanelConfig holds IPPanel-specific configuration
+type IPPanelConfig struct {
+	APIKey                  string `mapstructure:"api_key"`
+	Originator              string `mapstructure:"originator"`
+	PatternCode             string `mapstructure:"pattern_code"`
+	PasswordRecoveryPattern string `mapstructure:"password_recovery_pattern"`
+}
+
+// RetryConfig holds retry-related configuration
+type RetryConfig struct {
+	MaxAttempts  int `mapstructure:"max_attempts"`
+	DelaySeconds int `mapstructure:"delay_seconds"`
+}
+
+// PatternConfig holds pattern management configuration
+type PatternConfig struct {
+	Enabled bool     `mapstructure:"enabled"`
+	List    []string `mapstructure:"list"`
+	Current int      `mapstructure:"current"`
+}
+
 // EnvironmentConfig holds environment-specific configuration
 type EnvironmentConfig struct {
 	Mode  string `mapstructure:"mode"`
@@ -64,6 +95,7 @@ func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("./internal/config")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath("/etc/novinhub-webhook")
 	viper.AddConfigPath("$HOME/.novinhub-webhook")
@@ -119,6 +151,22 @@ func setDefaults() {
 	viper.SetDefault("health.endpoint", "/health")
 	viper.SetDefault("health.timeout", 5)
 
+	// SMS defaults
+	viper.SetDefault("sms.provider", "ippanel")
+	viper.SetDefault("sms.enabled", false)
+	viper.SetDefault("sms.retry.max_attempts", 3)
+	viper.SetDefault("sms.retry.delay_seconds", 5)
+
+	// Pattern defaults
+	viper.SetDefault("sms.patterns.enabled", true)
+	viper.SetDefault("sms.patterns.list", []string{
+		"a2xjmxbszf27a7e", // گروه اول
+		"m3p3jtuu13i4n1o", // گروه دوم
+		"l05j64348i04cx8", // گروه سوم
+		"nv4fgs9mczuv6rq", // گروه چهارم
+	})
+	viper.SetDefault("sms.patterns.current", 0)
+
 	// Environment defaults
 	viper.SetDefault("environment.mode", "development")
 	viper.SetDefault("environment.debug", false)
@@ -137,4 +185,93 @@ func (c *Config) IsProduction() bool {
 // IsDevelopment returns true if running in development mode
 func (c *Config) IsDevelopment() bool {
 	return c.Env.Mode == "development"
+}
+
+// Pattern Management Methods
+
+// GetCurrentPattern returns the current pattern
+func (c *Config) GetCurrentPattern() string {
+	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
+		return c.SMS.IPPanel.PatternCode // Fallback to default pattern
+	}
+
+	if c.SMS.Patterns.Current >= len(c.SMS.Patterns.List) {
+		return c.SMS.Patterns.List[0] // Fallback to first pattern
+	}
+
+	return c.SMS.Patterns.List[c.SMS.Patterns.Current]
+}
+
+// GetCurrentPatternInfo returns current pattern with index and group name
+func (c *Config) GetCurrentPatternInfo() (string, int, string) {
+	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
+		return c.SMS.IPPanel.PatternCode, 1, "پترن پیش‌فرض"
+	}
+
+	if c.SMS.Patterns.Current >= len(c.SMS.Patterns.List) {
+		return c.SMS.Patterns.List[0], 1, "گروه اول"
+	}
+
+	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
+	index := c.SMS.Patterns.Current + 1
+	groupName := groupNames[c.SMS.Patterns.Current]
+
+	return c.SMS.Patterns.List[c.SMS.Patterns.Current], index, groupName
+}
+
+// NextPattern moves to the next pattern
+func (c *Config) NextPattern() (string, int, string) {
+	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
+		return c.SMS.IPPanel.PatternCode, 1, "پترن پیش‌فرض"
+	}
+
+	c.SMS.Patterns.Current = (c.SMS.Patterns.Current + 1) % len(c.SMS.Patterns.List)
+
+	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
+	index := c.SMS.Patterns.Current + 1
+	groupName := groupNames[c.SMS.Patterns.Current]
+
+	return c.SMS.Patterns.List[c.SMS.Patterns.Current], index, groupName
+}
+
+// SetPattern sets a specific pattern by index
+func (c *Config) SetPattern(index int) error {
+	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
+		return fmt.Errorf("pattern management is disabled")
+	}
+
+	if index < 0 || index >= len(c.SMS.Patterns.List) {
+		return fmt.Errorf("invalid pattern index: %d", index)
+	}
+
+	c.SMS.Patterns.Current = index
+	return nil
+}
+
+// GetPatternsList returns all patterns with their info
+func (c *Config) GetPatternsList() []map[string]interface{} {
+	if !c.SMS.Patterns.Enabled || len(c.SMS.Patterns.List) == 0 {
+		return []map[string]interface{}{
+			{
+				"index":      1,
+				"name":       "پترن پیش‌فرض",
+				"pattern":    c.SMS.IPPanel.PatternCode,
+				"is_current": true,
+			},
+		}
+	}
+
+	groupNames := []string{"گروه اول", "گروه دوم", "گروه سوم", "گروه چهارم"}
+	patterns := make([]map[string]interface{}, len(c.SMS.Patterns.List))
+
+	for i, pattern := range c.SMS.Patterns.List {
+		patterns[i] = map[string]interface{}{
+			"index":      i + 1,
+			"name":       groupNames[i],
+			"pattern":    pattern,
+			"is_current": i == c.SMS.Patterns.Current,
+		}
+	}
+
+	return patterns
 }

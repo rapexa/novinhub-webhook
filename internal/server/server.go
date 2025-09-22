@@ -22,7 +22,7 @@ type Server struct {
 
 // New creates a new server instance
 func New(cfg *config.Config, log *logger.Logger) *Server {
-	webhookHandler := handlers.NewWebhookHandler(log)
+	webhookHandler := handlers.NewWebhookHandler(log, cfg)
 	healthHandler := handlers.NewHealthHandler(log)
 
 	return &Server{

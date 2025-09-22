@@ -39,6 +39,32 @@ health:
   # Health check timeout
   timeout: 5
 
+# SMS configuration
+sms:
+  # SMS provider (ippanel, kavenegar, melipayamak)
+  provider: "ippanel"
+  # IPPanel configuration
+  ippanel:
+    api_key: "OWY1ZTAyMjEtMThmNi00NzRiLWFhOTItZTEwMmFhNDQzZTliZTcwM2EzODg5NzUzNWMwOWE3ZDliYWUyYTExMWZlMzY="
+    originator: "+9850002040000000"
+    pattern_code: "9i276pvpwvuj40w"
+    password_recovery_pattern: "gvqto0pk77stx2t"
+  # Enable SMS sending (set to false for testing)
+  enabled: true
+  # SMS retry configuration
+  retry:
+    max_attempts: 3
+    delay_seconds: 5
+  # Pattern management configuration
+  patterns:
+    enabled: true
+    list:
+      - "a2xjmxbszf27a7e"  # گروه اول
+      - "m3p3jtuu13i4n1o"  # گروه دوم
+      - "l05j64348i04cx8"  # گروه سوم
+      - "nv4fgs9mczuv6rq"  # گروه چهارم
+    current: 0  # Current pattern index (0-based)
+
 # Environment specific settings
 environment:
   # Current environment (development, staging, production)

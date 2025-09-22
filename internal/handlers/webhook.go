@@ -2,23 +2,126 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
+	"novinhub-webhook/internal/config"
 	"novinhub-webhook/internal/models"
+	"novinhub-webhook/internal/services"
+	"novinhub-webhook/internal/utils"
 	"novinhub-webhook/pkg/logger"
 )
 
+// SMSCache represents a simple cache entry for SMS deduplication
+type SMSCache struct {
+	SentAt time.Time
+	Phone  string
+	UserID string
+}
+
 // WebhookHandler handles incoming webhook requests
 type WebhookHandler struct {
-	logger *logger.Logger
+	logger     *logger.Logger
+	smsService *services.SMSService
+	smsCache   map[string]SMSCache // key: phone_userID, value: cache entry
+	cacheMutex sync.RWMutex        // mutex for thread-safe cache operations
 }
 
 // NewWebhookHandler creates a new webhook handler
-func NewWebhookHandler(logger *logger.Logger) *WebhookHandler {
+func NewWebhookHandler(logger *logger.Logger, cfg *config.Config) *WebhookHandler {
 	return &WebhookHandler{
-		logger: logger,
+		logger:     logger,
+		smsService: services.NewSMSService(logger, cfg),
+		smsCache:   make(map[string]SMSCache),
+		cacheMutex: sync.RWMutex{},
+	}
+}
+
+// shouldSendSMS checks if SMS should be sent (daily limit logic)
+func (h *WebhookHandler) shouldSendSMS(phone, userID string) bool {
+	cacheKey := fmt.Sprintf("%s_%s", phone, userID)
+
+	h.cacheMutex.RLock()
+	cached, exists := h.smsCache[cacheKey]
+	h.cacheMutex.RUnlock()
+
+	if !exists {
+		return true // No previous SMS sent
+	}
+
+	// Check if it's a new day (daily reset)
+	now := time.Now()
+	lastSMSDate := cached.SentAt.Truncate(24 * time.Hour) // Get date only (remove time)
+	todayDate := now.Truncate(24 * time.Hour)
+
+	if lastSMSDate.Before(todayDate) {
+		// It's a new day, allow SMS
+		h.logger.Info("✅ NEW DAY - SMS ALLOWED",
+			"phone", phone,
+			"user_id", userID,
+			"last_sms_date", lastSMSDate.Format("2006-01-02"),
+			"today_date", todayDate.Format("2006-01-02"))
+		return true
+	}
+
+	// Same day - block SMS
+	timeSinceLast := time.Since(cached.SentAt)
+	timeUntilNextDay := time.Until(todayDate.Add(24 * time.Hour))
+
+	h.logger.Warn("🚫 SMS BLOCKED - ALREADY SENT TODAY",
+		"phone", phone,
+		"user_id", userID,
+		"last_sms_time", cached.SentAt.Format("2006-01-02 15:04:05"),
+		"time_since_last", timeSinceLast.String(),
+		"next_allowed_in", timeUntilNextDay.String())
+
+	return false
+}
+
+// markSMSSent records that SMS was sent for deduplication
+func (h *WebhookHandler) markSMSSent(phone, userID string) {
+	cacheKey := fmt.Sprintf("%s_%s", phone, userID)
+
+	h.cacheMutex.Lock()
+	h.smsCache[cacheKey] = SMSCache{
+		SentAt: time.Now(),
+		Phone:  phone,
+		UserID: userID,
+	}
+	h.cacheMutex.Unlock()
+
+	h.logger.Info("📝 SMS CACHE UPDATED",
+		"phone", phone,
+		"user_id", userID,
+		"cache_key", cacheKey)
+
+	// Clean old cache entries (older than 3 days)
+	go h.cleanupOldCache()
+}
+
+// cleanupOldCache removes cache entries older than 3 days
+func (h *WebhookHandler) cleanupOldCache() {
+	h.cacheMutex.Lock()
+	defer h.cacheMutex.Unlock()
+
+	cutoffTime := time.Now().Add(-3 * 24 * time.Hour) // 3 days ago
+	removedCount := 0
+
+	for key, cached := range h.smsCache {
+		if cached.SentAt.Before(cutoffTime) {
+			delete(h.smsCache, key)
+			removedCount++
+		}
+	}
+
+	if removedCount > 0 {
+		h.logger.Info("🧹 CACHE CLEANUP COMPLETED",
+			"removed_entries", removedCount,
+			"remaining_entries", len(h.smsCache),
+			"cutoff_date", cutoffTime.Format("2006-01-02"))
 	}
 }
 
@@ -109,9 +212,35 @@ func (h *WebhookHandler) handleMessageCreated(event models.WebhookEvent) {
 
 	h.logger.Info("Message details",
 		"message_id", message.ID,
+		"text", message.Text,
 		"content", message.Content,
 		"account", message.Account,
 		"social_user", message.SocialUser)
+
+	// Extract phone numbers from message text for logging only
+	// Note: We don't send SMS here to avoid duplicates with leed_created event
+	if message.Text != "" {
+		phoneNumbers := utils.ExtractIranianPhoneNumbers(message.Text)
+		if len(phoneNumbers) > 0 {
+			h.logger.Info("📱 PHONE NUMBER DETECTED IN DIRECT MESSAGE! 📱",
+				"user_id", event.UserID.String(),
+				"message_id", message.ID,
+				"phone_numbers", phoneNumbers,
+				"message_text", message.Text,
+				"note", "SMS will be sent via leed_created event to avoid duplicates")
+
+			// Log detected numbers but don't send SMS (wait for leed_created)
+			for _, phone := range phoneNumbers {
+				if utils.IsValidIranianPhone(phone) {
+					h.logger.Info("💡 PHONE DETECTED - WAITING FOR LEAD EVENT",
+						"phone", phone,
+						"user_id", event.UserID.String(),
+						"message_id", message.ID,
+						"status", "awaiting_lead_event")
+				}
+			}
+		}
+	}
 
 	// Add your business logic here for handling new messages
 	// For example: save to database, send notifications, etc.
@@ -188,9 +317,55 @@ func (h *WebhookHandler) handleLeadCreated(event models.WebhookEvent) {
 
 	h.logger.Info("Lead details",
 		"lead_id", lead.ID,
-		"phone", lead.Phone,
-		"messages", lead.Messages,
+		"type", lead.Type,
+		"value", lead.Value,
+		"message_id", lead.MessageID,
 		"social_user", lead.SocialUser)
+
+	// Process phone number leads specifically
+	if lead.Type == "number" && lead.Value != "" {
+		// Validate if it's a valid Iranian phone number
+		if utils.IsValidIranianPhone(lead.Value) {
+			h.logger.Warn("🎯 LEAD WITH VALID PHONE NUMBER DETECTED! 🎯",
+				"phone", lead.Value,
+				"lead_id", lead.ID,
+				"user_id", event.UserID.String(),
+				"message_id", lead.MessageID)
+
+			// Check if we should send SMS (deduplication)
+			if h.shouldSendSMS(lead.Value, event.UserID.String()) {
+				// Call SMS service to send pattern-based SMS
+				err := h.smsService.SendSMSWithPattern(
+					lead.Value,
+					event.UserID.String(),
+				)
+
+				if err != nil {
+					h.logger.Error("Failed to send SMS for lead",
+						"error", err,
+						"phone", lead.Value,
+						"lead_id", lead.ID)
+				} else {
+					// Mark SMS as sent to prevent duplicates
+					h.markSMSSent(lead.Value, event.UserID.String())
+
+					h.logger.Info("✅ SMS PROCESSING COMPLETED FOR LEAD",
+						"phone", lead.Value,
+						"lead_id", lead.ID,
+						"status", "sent_and_cached")
+				}
+			} else {
+				h.logger.Info("⏭️ SMS SKIPPED - RECENTLY SENT",
+					"phone", lead.Value,
+					"lead_id", lead.ID,
+					"user_id", event.UserID.String())
+			}
+		} else {
+			h.logger.Warn("Invalid phone number in lead",
+				"phone", lead.Value,
+				"lead_id", lead.ID)
+		}
+	}
 
 	// Add your business logic here for handling new leads
 }

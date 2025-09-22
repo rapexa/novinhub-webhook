@@ -43,6 +43,11 @@ novinhub-webhook/
   - `autoform_completed` - Completed smart forms
   - `leed_created` - New leads with phone numbers
   - `revalidate` - Webhook revalidation
+- ✅ **Smart SMS System**: 
+  - 4 different SMS patterns for daily rotation
+  - Telegram bot for pattern management
+  - Daily SMS limit (one per user per day)
+  - Pattern-based SMS with user ID
 - ✅ **Proper HTTP Response**: Returns 200 OK as required by NovinHub
 - ✅ **Structured Logging**: JSON logs with context
 - ✅ **Health Check**: Monitoring endpoint
@@ -79,6 +84,20 @@ go run cmd/server/main.go
 
 - **Webhook Endpoint**: `http://localhost:8080/webhook`
 - **Health Check**: `http://localhost:8080/health`
+
+### 4. Telegram Bot (Pattern Management)
+
+ربات تلگرام به صورت خودکار با webhook server اجرا می‌شود.
+
+**🔒 امنیت:**
+- فقط ادمین مشخص شده (ID: 76599340) می‌تواند از ربات استفاده کند
+- سایر کاربران هیچ واکنشی دریافت نمی‌کنند
+
+**Bot Commands:**
+- `/start` - Show main menu
+- `📱 پترن امروز` - Show current pattern
+- `➡️ برو به پترن بعدی` - Switch to next pattern
+- `📋 لیست پترن‌ها` - List all patterns
 
 ## ⚙️ Configuration
 
@@ -117,6 +136,23 @@ security:
   enable_cors: true
   allowed_origins: []
   rate_limit: 100
+
+# SMS configuration
+sms:
+  provider: "ippanel"
+  enabled: true
+  ippanel:
+    api_key: "YOUR_API_KEY"
+    originator: "+9850002040000000"
+    pattern_code: "9i276pvpwvuj40w"
+  patterns:
+    enabled: true
+    list:
+      - "a2xjmxbszf27a7e"  # گروه اول
+      - "m3p3jtuu13i4n1o"  # گروه دوم
+      - "l05j64348i04cx8"  # گروه سوم
+      - "nv4fgs9mczuv6rq"  # گروه چهارم
+    current: 0  # Current pattern index
 
 # Environment settings
 environment:
