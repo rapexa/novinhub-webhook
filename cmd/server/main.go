@@ -14,8 +14,21 @@ import (
 
 const (
 	BotToken = "8205935967:AAEI2jb_0y0-TlYZ_5gA2wF4cyIr7eaHYuU"
-	AdminID  = 76599340 // Admin Telegram ID
 )
+
+// Admin IDs - لیست ادمین‌های مجاز
+var AdminIDs = map[int64]string{
+	76599340:  "Admin Original",      // ادمین اصلی
+	110435852: "MahYaR (@Saeidpour)", // ادمین جدید
+}
+
+// isAdmin بررسی می‌کند که آیا کاربر ادمین است یا نه
+func isAdmin(userID int64) (bool, string) {
+	if name, exists := AdminIDs[userID]; exists {
+		return true, name
+	}
+	return false, ""
+}
 
 func main() {
 	// Load configuration
@@ -74,12 +87,13 @@ func startTelegramBot(cfg *config.Config, logger *logger.Logger) {
 
 func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.Config, logger *logger.Logger) {
 	// Check if message is from admin
-	if message.From.ID != AdminID {
+	isAdminUser, adminName := isAdmin(message.From.ID)
+	if !isAdminUser {
 		logger.Info("🚫 Unauthorized access attempt",
 			"user_id", message.From.ID,
 			"username", message.From.UserName,
 			"first_name", message.From.FirstName,
-			"admin_id", AdminID)
+			"available_admins", len(AdminIDs))
 		return
 	}
 
@@ -88,6 +102,7 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.
 		"user_id", message.From.ID,
 		"username", message.From.UserName,
 		"first_name", message.From.FirstName,
+		"admin_name", adminName,
 		"message", message.Text)
 
 	switch message.Text {
@@ -99,6 +114,8 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.
 		nextPattern(bot, message.Chat.ID, cfg)
 	case "📋 لیست پترن‌ها":
 		showPatternsList(bot, message.Chat.ID, cfg)
+	case "👥 لیست ادمین‌ها":
+		showAdminsList(bot, message.Chat.ID)
 	default:
 		sendMainMenu(bot, message.Chat.ID)
 	}
@@ -106,12 +123,13 @@ func handleMessage(bot *tgbotapi.BotAPI, message *tgbotapi.Message, cfg *config.
 
 func handleCallbackQuery(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQuery, cfg *config.Config, logger *logger.Logger) {
 	// Check if callback is from admin
-	if callbackQuery.From.ID != AdminID {
+	isAdminUser, adminName := isAdmin(callbackQuery.From.ID)
+	if !isAdminUser {
 		logger.Info("🚫 Unauthorized callback attempt",
 			"user_id", callbackQuery.From.ID,
 			"username", callbackQuery.From.UserName,
 			"first_name", callbackQuery.From.FirstName,
-			"admin_id", AdminID)
+			"available_admins", len(AdminIDs))
 		// Answer callback query with error
 		bot.Request(tgbotapi.NewCallback(callbackQuery.ID, "❌ دسترسی غیرمجاز"))
 		return
@@ -122,6 +140,7 @@ func handleCallbackQuery(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQ
 		"user_id", callbackQuery.From.ID,
 		"username", callbackQuery.From.UserName,
 		"first_name", callbackQuery.From.FirstName,
+		"admin_name", adminName,
 		"callback_data", callbackQuery.Data)
 
 	switch callbackQuery.Data {
@@ -131,6 +150,8 @@ func handleCallbackQuery(bot *tgbotapi.BotAPI, callbackQuery *tgbotapi.CallbackQ
 		nextPattern(bot, callbackQuery.Message.Chat.ID, cfg)
 	case "list_patterns":
 		showPatternsList(bot, callbackQuery.Message.Chat.ID, cfg)
+	case "list_admins":
+		showAdminsList(bot, callbackQuery.Message.Chat.ID)
 	}
 
 	// Answer callback query
@@ -152,6 +173,9 @@ func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64) {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("📋 لیست پترن‌ها", "list_patterns"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("👥 لیست ادمین‌ها", "list_admins"),
 		),
 	)
 
@@ -203,6 +227,21 @@ func showPatternsList(bot *tgbotapi.BotAPI, chatID int64, cfg *config.Config) {
 	}
 
 	text += "\n⏰ آخرین تغییر: " + time.Now().Format("2006-01-02 15:04:05")
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	bot.Send(msg)
+}
+
+func showAdminsList(bot *tgbotapi.BotAPI, chatID int64) {
+	text := "👥 لیست ادمین‌های سیستم:\n\n"
+
+	for userID, name := range AdminIDs {
+		text += "🔹 " + name + "\n"
+		text += "   ID: `" + strconv.FormatInt(userID, 10) + "`\n\n"
+	}
+
+	text += "📊 تعداد کل ادمین‌ها: " + strconv.Itoa(len(AdminIDs))
 
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ParseMode = "Markdown"
