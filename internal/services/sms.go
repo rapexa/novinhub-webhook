@@ -106,7 +106,7 @@ func (s *SMSService) SendSMSWithPattern(phoneNumber string, userID string) error
 	if userID == "" {
 		code = "کاربر گرامی"
 	} else {
-		code = userID
+		code = "کاربر گرامی"
 	}
 
 	variables := map[string]string{
